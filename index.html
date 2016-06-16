@@ -1,0 +1,349 @@
+<html>
+<head>
+<title>TRENTON 311</title>
+<link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.css"/>
+<link rel="stylesheet" href="http://libs.cartocdn.com/cartodb.js/v3/3.15/themes/css/cartodb.css" />
+<script src="http://libs.cartocdn.com/cartodb.js/v3/3.15/cartodb.js"></script>
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.4.0/css/font-awesome.min.css">
+<script src='https://api.mapbox.com/mapbox.js/plugins/leaflet-markercluster/v0.4.0/leaflet.markercluster.js'></script>
+<link href='https://api.mapbox.com/mapbox.js/plugins/leaflet-markercluster/v0.4.0/MarkerCluster.css' rel='stylesheet' />
+<link href='https://api.mapbox.com/mapbox.js/plugins/leaflet-markercluster/v0.4.0/MarkerCluster.Default.css' rel='stylesheet' />
+
+<script src="jquery/jquery-1.6.4.min.js"></script>
+<script src="spin-js/spin.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/2.4.0/math.min.js"></script>
+<script src="spin-js/jquery.spin.js"></script>
+<script src="d3-table/d3.min.js"></script>
+<script src="http://dimplejs.org/dist/dimple.v2.1.6.min.js"></script>
+<script src="leaflet-label/leaflet.label-src.js"></script>
+<script src="leaflet-pip/leaflet-pip.min.js"></script> 
+
+<link rel="stylesheet" href="leaflet-label/leaflet.label.css" />
+
+<script src="css2pdf/xepOnline.jqPlugin.js"></script>
+
+<script src="leaflet-fullscreen/Control.FullScreen.js"></script>
+<link rel="stylesheet" href="leaflet-fullscreen/Control.FullScreen.css"></script>
+
+<link rel="stylesheet" href="GeoSearch/css/l.geosearch.css" />
+    <script src="GeoSearch/js/l.control.geosearch.js"></script>
+    <script src="GeoSearch/js/l.geosearch.provider.google.js"></script>   
+    
+<link rel="stylesheet" href="leaflet-control-geocoder-1.4.0/dist/Control.Geocoder.css" />
+<script src="leaflet-control-geocoder-1.4.0/dist/Control.Geocoder.js"></script>
+
+<link rel="stylesheet" href="leaflet-sidebar/L.Control.Sidebar.css" />
+    <script src="leaflet-sidebar/L.Control.Sidebar.js"></script>
+	<script src="button/leaflet-button.js"></script>
+
+</head>
+<body>
+
+<style>
+
+#header {
+font-family: "Courier New";  
+
+}
+.btn-primary{
+	background: none repeat scroll 0 0 rgba(0, 0, 0, 0.25);
+	background-color:#ffffff;
+  font-weight: bold;
+	font-size:12px;
+	color:#777777;
+	border-radius: 4px;
+	margin: 0 ;
+	padding: 3px;
+	height: auto;  
+  width:120px;
+}
+
+#sidebar{
+	font-weight:"bold";
+	padding:10px;
+}
+
+.form {
+font-size:90%;  
+
+}
+
+</style>
+<div id="header" style="width:100%">
+  <div id="titlehead" style="float:left"><B>trenton 311 beta</b></div>
+  <div id="buttonheader" style="float:right">
+    <button id="reportbutton" role="button" class="btn-primary" title="REPORT" onClick="createEmptyIssueReport()");>REPORT</button>
+    <button id="showbutton" role="button" class="btn-primary" title="SHOW" onClick="");>SHOW</button>
+  </div>
+</div>
+  <div id="spacer" style="width:100%; height:6px; float:right;"></div>
+<div id="map" style="width: 100%; height: 90%;"></div>
+<div id="spinBox" claVss='spinner'></div>
+
+<script type="text/javascript">
+
+var config =
+{
+	city: "Trenton",
+	southwest: L.latLng(40.18000, -74.85000),
+    northeast: L.latLng(40.26000, -74.67000),
+    rev_geocoding_apikey: 'AIzaSyAKf5AB_5QngOuThxqDCo8A8U17qpCBu00',
+    database_name: 'trenton_master',
+    additional_attrib : 'created by iana dikidjieva to cause trouble :-)<br>',
+   	sql_url : 'http://restoringtrenton.cartodb.com/api/v2/sql?q=',
+  
+}	
+
+var popup = L.popup();
+var wardLayerURL = encodeURI("https://trenton-downtown.cartodb.com/api/v2/sql?format=GeoJSON&q=SELECT * FROM wards");
+var tdaLayerURL = encodeURI("https://trenton-downtown.cartodb.com/api/v2/sql?format=GeoJSON&q=SELECT * FROM tda_boundary_clean");
+var inTDA;
+var ward='';
+var lat;
+var lng;
+var address='';
+var addInput = '';
+
+
+var map = L.map('map', {
+  fullscreenControl: true,
+  fullscreenControlOptions: {
+    position: 'topleft'
+  }
+}).setView([40.224, -74.76], 15);
+
+var stamen = L.tileLayer('http://a.tile.stamen.com/toner-lite/{z}/{x}/{y}.png', {attribution: config.additional_attrib + ' uses a <a href="http://stamen.com">stamen</a> basemap'});
+stamen.addTo(map);
+
+googleSat = L.tileLayer('http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{
+    maxZoom: 20,
+    subdomains:['mt0','mt1','mt2','mt3'],
+	attribution: '<br>' + config.additional_attrib
+});
+
+var bases = { "streets (stamen toner lite)": stamen, "google satellite": googleSat};
+
+<!-- geocode plugin -->
+
+var geocoder = new L.Control.Geocoder.google(),
+			control = L.Control.geocoder({
+				geocoder: geocoder,  
+          
+			}).addTo(map);     
+
+ <!-- issue report sidebar -->
+ 
+  var div_sidebar = document.createElement('div');
+  div_sidebar.id = "sidebar";
+  div_sidebar.class = "sidebar";
+  $('body')[0].appendChild(div_sidebar);
+  
+  sidebar = L.control.sidebar('sidebar', {
+      position: 'right'
+  });
+	map.addControl(sidebar);
+
+<!-- pulling parcel bases off RestoringTrenton -->
+var parcelMasterURL = 'https://restoringtrenton.cartodb.com/api/v2/viz/aebbd47a-5690-11e5-beed-0e853d047bba/viz.json';
+
+<!-- TDA boundary -->
+var tda_URL = 'https://trenton-downtown.cartodb.com/api/v2/viz/c929e5fa-2781-11e6-a299-0e31c9be1b51/viz.json';
+
+<!-- for the boundary/territory checkers -- whose problem is it? -->
+
+var wardLayer = L.geoJson();
+function addWards(data, map) {
+    wardLayer = L.geoJson(data);   
+    }
+$.getJSON(wardLayerURL, function(data) { addWards(data, map); });
+
+var tdaLayer = L.geoJson();
+function addTDA(data, map) {
+    tdaLayer = L.geoJson(data);   
+    }
+$.getJSON(tdaLayerURL, function(data) { addTDA(data, map); });
+
+
+<!-- back to overlayers for the main map, currently turned off -->
+  overlayLayers = {}; 
+  var sublayers = [allPropsGet, tdaGet];
+
+<!-- basic parcel outlines -->
+  
+  cartodb.createLayer(map, parcelMasterURL)
+    .addTo(map)
+    .on('done', function(layer) { 
+      layer.setZIndex(1);
+      var sublayer = layer.getSubLayer(0);
+      sublayer.set(allPropsGet);
+      sublayers.push(sublayer);
+      overlayLayers["BASE PARCELS"] = layer;
+
+      layer.setInteraction(false);   
+      
+      }).on('error', function() { 
+      //log the error
+    });  
+    
+    var allPropsGet = {
+    sql: "SELECT * FROM trenton_master",
+    cartocss: "#trenton_properties{polygon-fill: #fff; polygon-opacity:0;line-color:#999; line-opacity:0.2;} #trenton_properties[parc_type='OPEN SPACE OR CEMETERY'] {polygon-fill:#259073; polygon-opacity:.3;}",
+  }
+  
+   var tdaGet = {
+	 sql: "SELECT * FROM tda_boundary_clean"} 
+   
+   <!-- TDA's boundary -->
+cartodb.createLayer(map, tda_URL)
+    .on('done', function(layer) { 
+      layer.setZIndex(13);
+      var sublayer = layer.getSubLayer(0);
+
+      sublayer.set(tdaGet);
+      sublayers.push(sublayer);
+	  layer.setInteraction(false);
+      overlayLayers["TRENTON DOWNTOWN"] = layer; 
+      
+//	  L.control.layers(bases, overlayLayers, {position:'topleft'}).addTo(map);
+	 
+     }).on('error', function() { 
+      //log the error
+    });
+
+ 		var popup = L.popup();  
+
+		function onMapClick(e) {      
+    
+    lat = e.latlng.lat;
+    lng = e.latlng.lng;
+
+    control.options.geocoder.reverse(e.latlng, map.options.crs.scale(map.getZoom()), function(results) {
+            var r = results[0];
+               loc = r.name; 
+      popup.setLatLng(e.latlng, {draggable:true});
+
+      displayLocFrom = loc.search("Trenton");
+      displayLoc = loc.substr(0, displayLocFrom-2);
+
+      var wardResult = leafletPip.pointInLayer([e.latlng.lng, e.latlng.lat], wardLayer, true);
+      ward = wardResult[0].feature.properties.ward;
+      console.log(ward);
+      console.log(loc);    
+      
+      var tdaArray = leafletPip.pointInLayer([e.latlng.lng, e.latlng.lat], tdaLayer, true);
+      if (tdaArray.length) {
+         inTDA = "Yes"
+      } 
+      else { inTDA = "No" }
+      console.log(inTDA);
+      
+      address = loc;           
+  
+      popContent = 
+      "<i><span style='font-size:10'> Approx. address</span></i><br>"+
+      "<b> " + displayLoc + "</b>" +   
+      "<br><b>Ward: </b>" + ward +     
+      "<br><b>TDA?: </b>" + inTDA +
+      "<hr><button id='reportbutton' role='button' class='btn-primary' title='REPORT' onClick='createIssueReport(lat, lng, address)');>REPORT</button>"    ;
+  
+   		popup.setContent(popContent);    
+      
+      popup.openOn(map); 
+            
+            } );                                              
+        
+        
+		} 
+ 
+ function needsNum(type) { 
+ console.log(type); 
+ 
+  switch (type) {
+    case 'Streetlight': createNumField(); 
+      console.log("creating NumField");
+      break;
+    case 'Parking meter': createNumField();  
+      console.log("creating NumField");
+      break;  
+  }  
+  
+  function createNumField() { 
+  console.log("in NumField");
+  var addInNum = "<br><b>" + type.toUpperCase() + " NUMBER &nbsp &nbsp</b>"; 
+  var numberInput = "<input type='text' name='num'>" ;
+  addInput = addInNum + numberInput;
+  console.log(addInput);  
+  createIssueReport(lat, lng, address);
+  sidebar.toggle(); 
+  }
+  
+ } 
+ 
+ function createIssueReport(lat, lng, address) {
+ 
+ lat = lat;
+ lng = lng;
+ address = address; 
+ 
+ sidebar.toggle();   
+ if (address) { 
+  if (address !='') {address = address; }   }
+ else {address = "enter the nearest address";}
+ 
+ var issueReportForm = 
+ 
+ "<fieldset><b>REPORT AN ISSUE</b><br>" + 
+	"<hr>" +
+	"<form id='issue_report_form' class='form'>"+
+	"<b>ADDRESS</b>" + "<input type='text' style = 'width:100%' id = 'issue_address' value = '" + address + "'>" +
+  "<br><br><b>ISSUE</b>&nbsp &nbsp" +   
+		"<select id='issue_type' name='issue_type' onchange ='needsNum(this.value)'>" + "<br>" + 
+     "<option value='null'></option>" +  
+    "<option value='Pothole'>Pothole/pavement</option>" +    
+    "<option value='Streetlight'>Streetlight</option>" +   
+    "<option value='Traffic light'>Traffic light</option>" +
+    "<option value='Parking meter'>Parking meter</option>" +   
+    "<option value='Trash'>Trash</option>" + 
+    "<option value='Dumping'>Dumping</option>" + 
+    "<option value='Vandalism'>Vandalism</option>" + 
+    "<option value='Noise'>Noise</option>" + 
+    "<option value='Animals'>Animals</option>" +
+    "<option value='Water'>Water issue (hydrant, main break)</option>" +
+    "<option value='Tree'>Tree issue</option>" + 
+    "<option name='issue_type' value='Vacant building'>Vacant building issue</option>" +   
+    "<option name='issue_type' value='Weeds'>Weeds (over 2.5 ft)</option>" + 
+    "<option name='issue_type' value='Peeing'>Public urination</option>" +  
+    "<option name='issue_type' value='Broken'>Broken equipment (bench, playground)</option>" +     
+    "<option value='Other'>Other (describe)</option>" +  			
+     
+		"</select> " + "<br>" +  
+                    
+    addInput +  
+    
+	"<br><b>DESCRIPTION</b>" + "<input type='textarea' style = 'width:100%' id = 'description'>" +  
+
+
+	    "</form></fieldset>";
+
+ 
+ sidebar.setContent(issueReportForm);
+ 
+ 
+ }  
+ 
+
+  
+ function createEmptyIssueReport() {
+ address = '';   
+ lat='';
+ lng='';
+ createIssueReport();
+ }
+ 
+	map.on('click', onMapClick);
+ 
+
+
+</script>
+</body>
+</html>
